@@ -17,7 +17,8 @@ class DiffAnalysis:
     beatmap_id: int
     version: str
     mods: list[str]
-    star_rating: float
+    star_rating: float          # mod-adjusted — matches `mods`, used for filtering
+    nomod_star_rating: float    # official/base rating — matches the osu! client & website
     aim_strain: float
     speed_strain: float
     pp: float

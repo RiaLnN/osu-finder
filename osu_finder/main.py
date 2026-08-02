@@ -20,6 +20,7 @@ import argparse
 import asyncio
 import logging
 import sys
+from typing import Optional
 
 import aiohttp
 from rich.console import Console
@@ -96,13 +97,27 @@ def any_mod_combo_could_match_ar(
 #  Rendering
 # =============================================================================
 
+def _fmt_range(rf: RangeFilter, unit: str = "") -> str:
+    if rf.is_unrestricted:
+        return "Unrestricted"
+    if rf.max is None:
+        return f"from {rf.min}{unit}"
+    if rf.min is None:
+        return f"up to {rf.max}{unit}"
+    return f"{rf.min} \u2013 {rf.max}{unit}"
+
+
 def render_candidate_row(candidate: BeatmapCandidate) -> None:
     best = candidate.best_match
+    # nomod_star_rating identifies the map as it appears in the osu! client/
+    # website; star_rating/pp/bpm/etc. describe the specific mod combo that
+    # matched the filters (best.mods_label makes that explicit).
     console.print(
         f"  [bold green]\u2713[/bold green] [bold]{candidate.artist} - {candidate.title}[/bold] "
         f"[dim](id {candidate.beatmapset_id}, {candidate.status})[/dim]\n"
-        f"      [{best.mods_label}] {best.version} \u2014 "
-        f"\u2605{best.star_rating:.2f}  {best.pp:.0f}pp  {best.bpm:.0f} BPM  {best.length_seconds:.0f}s  "
+        f"      {best.version} \u2014 \u2605{best.nomod_star_rating:.2f} nomod\n"
+        f"      matched via [{best.mods_label}]: \u2605{best.star_rating:.2f}  {best.pp:.0f}pp  "
+        f"{best.bpm:.0f} BPM  {best.length_seconds:.0f}s  "
         f"AR{best.ar:.1f} CS{best.cs:.1f} OD{best.od:.1f}  style: {best.playstyle}"
     )
     if len(candidate.matched_diffs) > 1:
@@ -115,50 +130,72 @@ def render_summary(candidates: list[BeatmapCandidate]) -> None:
         return
 
     table = Table(title=f"Summary: {len(candidates)} map(s) downloaded")
-    for col, justify in [("Set ID", "right"), ("Artist - Title", "left"), ("Mods", "left"),
-                        ("\u2605", "right"), ("PP", "right"), ("BPM", "right"), ("Style", "left")]:
+    for col, justify in [("Set ID", "right"), ("Artist - Title", "left"), ("\u2605 (nomod)", "right"),
+                            ("Mods", "left"), ("PP", "right"), ("BPM", "right"), ("Style", "left")]:
         table.add_column(col, justify=justify) # type: ignore
-        
 
     for c in candidates:
         best = c.best_match
         table.add_row(
-            str(c.beatmapset_id), f"{c.artist} - {c.title}", best.mods_label,
-            f"{best.star_rating:.2f}", f"{best.pp:.0f}", f"{best.bpm:.0f}", best.playstyle,
+            str(c.beatmapset_id), f"{c.artist} - {c.title}", f"{best.nomod_star_rating:.2f}",
+            best.mods_label, f"{best.pp:.0f}", f"{best.bpm:.0f}", best.playstyle,
         )
     console.print(table)
+    console.print(
+        "\n[dim]Not what you wanted? `osu-finder --ban <set_id>` blacklists a map so it "
+        "won't be suggested again \u2014 then you can safely delete it from Songs.[/dim]"
+    )
 
 
-def render_preset_info(preset_name: str, config: AppConfig) -> None:
-    adv, base = config.advanced_filters, config.base_filters
+def render_preset_info(
+    preset_name: str, mods: list[list[str]], base: BaseFilters, adv: AdvancedFilters, execution: ExecutionConfig
+) -> None:
     table = Table(title=f"Preset: [bold cyan]{preset_name}[/bold cyan]", border_style="cyan")
     table.add_column("Parameter", style="bold white")
     table.add_column("Value", style="green")
 
-    def fmt(rf: RangeFilter, unit: str = "") -> str:
-        if rf.is_unrestricted:
-            return "Unrestricted"
-        if rf.max is None:
-            return f"from {rf.min}{unit}"
-        if rf.min is None:
-            return f"up to {rf.max}{unit}"
-        return f"{rf.min} \u2013 {rf.max}{unit}"
-
-    mod_str = ", ".join("".join(m) for m in config.mods) if config.mods else "NM"
+    mod_str = ", ".join("".join(m) for m in mods) if mods else "NM"
 
     table.add_row("Mode / Status", f"{base.mode} / {base.status}")
     table.add_row("Mods", mod_str)
-    table.add_row("PP", f"{fmt(adv.pp)} (acc {adv.pp.accuracy}%)")
-    table.add_row("Star rating", fmt(adv.star_rating, "\u2605"))
+    table.add_row("PP", f"{_fmt_range(adv.pp)} (acc {adv.pp.accuracy}%)")
+    table.add_row("Star rating", _fmt_range(adv.star_rating, "\u2605"))
     table.add_row("Playstyle", f"{adv.playstyle.type} (threshold {adv.playstyle.threshold})")
-    table.add_row("AR", fmt(adv.ar))
-    table.add_row("CS", fmt(adv.cs))
-    table.add_row("OD", fmt(adv.od))
-    table.add_row("BPM", fmt(adv.bpm))
-    table.add_row("Length", fmt(adv.length, "s"))
-    table.add_row("Min. playcount", fmt(adv.playcount))
-    table.add_row("Target count", str(config.execution.target_count))
-    table.add_row("Auto-open", str(config.execution.auto_open))
+    table.add_row("AR", _fmt_range(adv.ar))
+    table.add_row("CS", _fmt_range(adv.cs))
+    table.add_row("OD", _fmt_range(adv.od))
+    table.add_row("BPM", _fmt_range(adv.bpm))
+    table.add_row("Length", _fmt_range(adv.length, "s"))
+    table.add_row("Min. playcount", _fmt_range(adv.playcount))
+    table.add_row("Target count", str(execution.target_count))
+    table.add_row("Auto-open", str(execution.auto_open))
+    console.print(table)
+
+
+def render_preset_list(entries: list[tuple[str, dict]]) -> None:
+    if not entries:
+        console.print("[yellow]No presets found. Create one with --create-preset.[/yellow]")
+        return
+
+    table = Table(title="Presets")
+    table.add_column("Name", style="bold")
+    table.add_column("Mode")
+    table.add_column("Mods")
+    table.add_column("PP")
+    table.add_column("Stars")
+
+    for name, raw in entries:
+        base = raw.get("base_filters", {}) or {}
+        adv = raw.get("advanced_filters", {}) or {}
+        mods = raw.get("mods") or [["NM"]]
+        pp, star = adv.get("pp", {}) or {}, adv.get("star_rating", {}) or {}
+        table.add_row(
+            name,
+            base.get("mode", "osu"),
+            ", ".join("".join(m) for m in mods),
+            _fmt_range(RangeFilter(min=pp.get("min"), max=pp.get("max"))),
+            _fmt_range(RangeFilter(min=star.get("min"), max=star.get("max")), "\u2605"),
+        )
     console.print(table)
 
 
@@ -197,7 +234,7 @@ async def run(config: AppConfig) -> list[BeatmapCandidate]:
                     skipped_local += 1
                     continue
 
-                if not config.advanced_filters.playcount.contains(bset.get("playcount", 0)):
+                if not config.advanced_filters.playcount.contains(bset.get("play_count", 0)):
                     continue
 
                 checked_sets += 1
@@ -290,7 +327,8 @@ def _ask_bool(label: str, default: bool) -> bool:
     return default if not raw else raw.startswith("y")
 
 
-def run_preset_wizard(config_path: str) -> None:
+def run_preset_wizard(config_path: str) -> Optional[str]:
+    """Returns the new preset's name if the user wants to run it right away, else None."""
     console.print(Panel.fit("[bold cyan]New Preset Wizard[/bold cyan]", border_style="cyan"))
     console.print("[dim]Enter skips a field (unrestricted / default).[/dim]\n")
 
@@ -301,7 +339,7 @@ def run_preset_wizard(config_path: str) -> None:
     presets_dir = ConfigManager.presets_dir(config_path)
     if (presets_dir / f"{name}.yaml").exists() and not _ask_bool(f"'{name}' already exists \u2014 overwrite?", False):
         console.print("[yellow]Cancelled.[/yellow]")
-        return
+        return None
 
     mode = _ask_choice("Game mode", ["osu", "taiko", "fruits", "mania"], "osu")
     status = _ask_choice("Beatmap status", ["ranked", "qualified", "loved", "pending", "graveyard", "any"], "ranked")
@@ -324,7 +362,7 @@ def run_preset_wizard(config_path: str) -> None:
     playstyle_type = _ask_choice("Playstyle", ["jump", "stream", "hybrid", "any"], "any")
     playstyle_threshold = float(_ask_text("Playstyle strain-ratio threshold", "1.15"))
 
-    target_count = int(_ask_text("How many maps to find per run", "5"))
+    target_count = int(_ask_text("How many maps to find per run", "20"))
     auto_open = _ask_bool("Auto-open downloaded .osz files", True)
 
     base_filters = BaseFilters(mode=mode, status=status, keywords=keywords, sort=sort)
@@ -337,8 +375,13 @@ def run_preset_wizard(config_path: str) -> None:
     execution = ExecutionConfig(target_count=target_count, auto_open=auto_open)
 
     path = ConfigManager.save_preset(config_path, name, mods, base_filters, advanced_filters, execution)
-    console.print(f"\n[bold green]Preset saved:[/bold green] {path}")
-    console.print(f"[dim]Run it with: osu-finder -p {name}[/dim]")
+    console.print(f"\n[bold green]Preset saved:[/bold green] {path}\n")
+    render_preset_info(name, mods, base_filters, advanced_filters, execution)
+
+    if _ask_bool("\nUse this preset now?", True):
+        return name
+    console.print(f"[dim]Run it later with: osu-finder -p {name}[/dim]")
+    return None
 
 
 # =============================================================================
@@ -373,6 +416,11 @@ def handle_init(args: argparse.Namespace) -> None:
     )
 
 
+def handle_list_presets(args: argparse.Namespace) -> None:
+    entries = ConfigManager.list_presets(args.config)
+    render_preset_list(entries)
+
+
 def handle_ban(args: argparse.Namespace) -> None:
     try:
         ConfigManager.ban_beatmapset(args.config, args.ban)
@@ -403,7 +451,8 @@ def parse_args() -> argparse.Namespace:
     main_group = parser.add_argument_group("Main commands")
     main_group.add_argument("--init", action="store_true", help="Interactive first-time setup")
     main_group.add_argument("--create-preset", action="store_true", help="Interactively build a new preset")
-    main_group.add_argument("-p", "--preset", type=str, help="Preset to load (default: active_preset from config)")
+    main_group.add_argument("--list-presets", action="store_true", help="List all saved presets")
+    main_group.add_argument("-p", "--preset", type=str, help="Preset to load (default: 'default')")
     main_group.add_argument("-u", "--analyze-user", type=str, help="Build a preset from a player's top plays")
     main_group.add_argument("--focus", choices=["balanced", "stream", "jump", "push", "farm"], default="balanced")
     main_group.add_argument("--run-search", action="store_true", help="Run the search right after --analyze-user")
@@ -532,9 +581,14 @@ async def async_main() -> None:
     if args.ban is not None:
         handle_ban(args)
         return
-    if args.create_preset:
-        run_preset_wizard(args.config)
+    if args.list_presets:
+        handle_list_presets(args)
         return
+    if args.create_preset:
+        preset_name = run_preset_wizard(args.config)
+        if not preset_name:
+            return
+        args.preset = preset_name  # fall through into the normal load+run flow below
 
     console.print(Panel.fit("[bold cyan]osu! Map Finder[/bold cyan]", border_style="cyan"))
 
@@ -563,7 +617,7 @@ async def async_main() -> None:
         return
 
     if args.show_preset:
-        render_preset_info(current_preset, config)
+        render_preset_info(current_preset, config.mods, config.base_filters, config.advanced_filters, config.execution)
         return
 
     try:

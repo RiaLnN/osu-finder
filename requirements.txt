@@ -2,3 +2,7 @@ aiohttp>=3.9
 PyYAML>=6.0
 rosu-pp-py>=4.0
 rich>=13.0
+pytest>=8
+pytest-asyncio
+pytest-cov
+aioresponses

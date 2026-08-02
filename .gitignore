@@ -5,3 +5,4 @@ user_*
 dist
 osu_finder.egg-info
 __pycache__
+.pytest_cache

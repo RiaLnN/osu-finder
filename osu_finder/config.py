@@ -149,13 +149,51 @@ class ConfigManager:
         return Path(global_config_path).resolve().parent / "presets"
 
     @staticmethod
+    def get_active_preset(global_config_path: str | Path) -> str:
+        path = Path(global_config_path)
+        if not path.exists():
+            return "default"
+        name = ConfigManager.read_raw(path).get("active_preset", "default")
+        return str(name).removesuffix(".yaml").removesuffix(".json")
+
+    @staticmethod
+    def set_active_preset(global_config_path: str | Path, preset_name: str) -> None:
+        """Persists which preset `-p`/`--preset` defaults to when omitted.
+        Does not check whether the preset file exists — callers (the CLI)
+        should validate that first so the error message can be specific."""
+        path = Path(global_config_path)
+        if not path.exists():
+            raise ConfigError(f"Config file not found: {path}")
+
+        raw = ConfigManager.read_raw(path)
+        raw["active_preset"] = str(preset_name).removesuffix(".yaml").removesuffix(".json")
+        with path.open("w", encoding="utf-8") as f:
+            yaml.safe_dump(raw, f, allow_unicode=True, sort_keys=False, default_flow_style=False)
+
+    @staticmethod
+    def list_presets(global_config_path: str | Path) -> list[tuple[str, dict[str, Any]]]:
+        """Returns (name, raw_preset_dict) for every preset file, without
+        merging in global credentials/paths — cheap enough to use for a
+        listing even if the global config itself has issues."""
+        presets_dir = ConfigManager.presets_dir(global_config_path)
+        if not presets_dir.exists():
+            return []
+        result = []
+        for path in sorted(presets_dir.glob("*.yaml")):
+            try:
+                result.append((path.stem, ConfigManager.read_raw(path)))
+            except ConfigError:
+                result.append((path.stem, {}))
+        return result
+
+    @staticmethod
     def load(global_path: str | Path, override_preset: Optional[str] = None) -> AppConfig:
         global_path = Path(global_path)
         if not global_path.exists():
             raise ConfigError(
                 f"Global config file not found: {global_path}. Run 'osu-finder --init' first."
             )
-        global_raw = ConfigManager._read_config_file(global_path)
+        global_raw = ConfigManager.read_raw(global_path)
 
         preset_name = override_preset or global_raw.get("active_preset", "default")
         preset_name = str(preset_name).removesuffix(".yaml").removesuffix(".json")
@@ -169,7 +207,7 @@ class ConfigManager:
         if not preset_path.exists():
             raise ConfigError(f"Preset file not found: {preset_path}")
 
-        preset_raw = ConfigManager._read_config_file(preset_path)
+        preset_raw = ConfigManager.read_raw(preset_path)
 
         # Shallow merge: global and preset files use disjoint top-level keys
         # (credentials/paths/mirror/network/blacklist vs. mods/base_filters/
@@ -242,7 +280,7 @@ class ConfigManager:
         if not path.exists():
             raise ConfigError(f"Config file not found: {path}")
 
-        raw = ConfigManager._read_config_file(path)
+        raw = ConfigManager.read_raw(path)
         blacklist = raw.get("blacklist", [])
         if not isinstance(blacklist, list):
             blacklist = []
@@ -318,7 +356,7 @@ class ConfigManager:
     # ------------------------------------------------------------------ #
 
     @staticmethod
-    def _read_config_file(path: Path) -> dict[str, Any]:
+    def read_raw(path: Path) -> dict[str, Any]:
         text = path.read_text(encoding="utf-8")
         try:
             if path.suffix.lower() == ".json":
@@ -344,7 +382,7 @@ class ConfigManager:
             "base_filters": {"mode": "osu", "status": "ranked", "sort": "ranked_desc"},
             "advanced_filters": {
                 "pp": {"min": 100, "max": 200, "accuracy": 99.0},
-                "star_rating": {"min": 4.0, "max": 5.0},
+                "star_rating": {"min": 4.5, "max": 5.5},
                 "playstyle": {"type": "any", "threshold": 1.15},
             },
             "execution": {"target_count": 5, "auto_open": True, "max_pages": 30, "request_delay": 1.0},

@@ -103,6 +103,14 @@ class PpAnalyzer:
             attr_builder = rosu.BeatmapAttributesBuilder(mods=mods_arg)
             attr_builder.set_map(beatmap)
             mod_attrs = attr_builder.build()
+
+            # The map's official/nomod star rating — what osu!'s own client and
+            # website show for this difficulty. `star_rating` below is
+            # mod-adjusted (matches `mods`) and is what matched the filters,
+            # but it won't match what you see when you open the map without
+            # applying that mod, which makes the map hard to recognize later.
+            # Keep both: this is cheap since `beatmap` is already parsed.
+            nomod_stars = diff_attrs.stars if not mods_arg else rosu.Difficulty(mods=[]).calculate(beatmap).stars
         except Exception as exc:
             logger.error("rosu-pp-py calculation failed for id=%s: %s", beatmap_id, exc)
             return None
@@ -115,6 +123,7 @@ class PpAnalyzer:
             version=version,
             mods=list(mods),
             star_rating=diff_attrs.stars,
+            nomod_star_rating=nomod_stars,
             aim_strain=aim,
             speed_strain=speed,
             pp=perf_attrs.pp,
