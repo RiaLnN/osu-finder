@@ -10,7 +10,6 @@
 
 <p align="center">
 
-[![Python](https://img.shields.io/pypi/pyversions/osu-finder.svg)](https://pypi.org/project/osu-finder/)
 [![PyPI](https://img.shields.io/pypi/v/osu-finder.svg)](https://pypi.org/project/osu-finder/)
 [![License](https://img.shields.io/github/license/RiaLnN/osu-finder)](LICENSE)
 
