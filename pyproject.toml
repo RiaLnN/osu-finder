@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "osu-finder"
-version = "0.2.0"
+version = "0.2.1"
 description = "Automated osu! beatmap finder — local PP/SR calculation via rosu-pp-py, mod-aware filtering, and profile-based preset generation."
 readme = "README.md"
 requires-python = ">=3.10"

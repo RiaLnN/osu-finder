@@ -265,7 +265,7 @@ osu-finder --help
 Clone the repository:
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/osu-finder.git
+git clone https://github.com/RiaLnN/osu-finder.git
 cd osu-finder
 ```
 
