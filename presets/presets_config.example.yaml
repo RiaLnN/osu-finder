@@ -1,0 +1,68 @@
+# Example preset — one preset = one saved search. Copy this to
+# presets/<name>.yaml, or generate one interactively with
+# `osu-finder --create-preset` (or `osu-finder -u <username> --focus ...`
+# to derive one from a player's top plays).
+#
+# For every range below: omit a bound, or set it to null, to leave that
+# side "Unrestricted". Both null -> the whole filter is unrestricted.
+
+# Mod combinations to analyze for EACH difficulty found. A difficulty is
+# kept if it passes advanced_filters under ANY of these. "NM" = no mods.
+mods:
+  - ["NM"]
+  - ["DT"]
+  - ["HD", "HR"]
+
+base_filters:
+  mode: osu             # osu | taiko | fruits | mania
+  status: ranked          # ranked | qualified | loved | pending | graveyard | any
+  keywords: ""              # free-text search (artist/title/tags), optional
+  genre: null                 # numeric genre ID from the osu! website, optional
+  language: null                # numeric language ID from the osu! website, optional
+  sort: ranked_desc                # ranked_desc | ranked_asc | difficulty_desc | ...
+
+# Everything below is evaluated per (difficulty, mod combo) AFTER download —
+# i.e. already mod-adjusted (DT's BPM/length/AR shift, HR's CS/OD bump, etc.)
+advanced_filters:
+  pp:
+    min: 150
+    max: 400
+    accuracy: 99.0        # accuracy (%) the PP figure is calculated at
+
+  star_rating:
+    min: 5.5
+    max: 7.5
+
+  bpm:
+    min: 150
+    max: 300
+
+  length:                  # seconds
+    min: 60
+    max: 240
+
+  ar:
+    min: 9.0
+    max: 10.2
+
+  cs:
+    min: null                # Unrestricted
+    max: null
+
+  od:
+    min: null
+    max: null
+
+  playcount:                  # nomod, set-level popularity — not mod-adjusted
+    min: null
+    max: null
+
+  playstyle:
+    type: jump                 # jump | stream | hybrid | any
+    threshold: 1.15               # speed_strain / aim_strain ratio that counts as "dominant"
+
+execution:
+  target_count: 20            # how many maps to find per run
+  auto_open: true               # open each .osz right after downloading
+  max_pages: 50                  # safety cap on search pages walked
+  request_delay: 1.0              # seconds between osu! API requests

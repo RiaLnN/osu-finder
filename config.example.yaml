@@ -1,0 +1,34 @@
+# Global settings — shared by every preset. Copy this to config.yaml and run
+# `osu-finder --init` instead if you'd rather be walked through it interactively.
+ 
+credentials:
+  # https://osu.ppy.sh/home/account/edit#oauth -> New OAuth Application
+  # (Callback URL can be left blank; only the Client Credentials Grant is used)
+  client_id: "12345"
+  client_secret: YOUR_CLIENT_SECRET
+ 
+paths:
+  songs_folder: C:\Users\user\AppData\Local\osu!\Songs
+  download_folder: downloads
+ 
+# Files aren't served by the official API without a logged-in user, so a
+# mirror is used instead. Mirrors change domains/paths occasionally — if
+# downloads start failing, check the mirror's site and update these three
+# lines (only api_client.py / pp_analyzer.py / downloader.py read them).
+mirror:
+  base_url: https://osu.direct
+  osu_file_path: /api/osu/{id}     # {id} = difficulty (beatmap) id
+  osz_download_path: /api/d/{id}    # {id} = beatmapset id
+ 
+# Beatmapset IDs to always skip, in addition to whatever's already in
+# paths.songs_folder. Add more with: osu-finder --ban <set_id>
+blacklist: []
+ 
+network:
+  proxy_url: null          # e.g. "http://user:pass@host:port" (HTTP/HTTPS only, not SOCKS)
+  fallback_to_direct: true  # if the proxy fails, retry the same request directly
+ 
+# Which presets/<name>.yaml to use when -p/--preset isn't given on the
+# command line. `osu-finder --create-preset` or `osu-finder -u <user>` can
+# create new ones.
+active_preset: default

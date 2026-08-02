@@ -1,0 +1,7 @@
+.venv
+config.yaml
+default.yaml
+user_*
+dist
+osu_finder.egg-info
+__pycache__
